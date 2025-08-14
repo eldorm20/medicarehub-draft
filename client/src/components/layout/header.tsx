@@ -38,10 +38,10 @@ export function Header() {
   };
 
   const navigation = [
-    { name: 'Home', href: '/', icon: Home },
-    { name: 'Search Medicines', href: '/medicine-search', icon: Search },
-    { name: 'AI Consultation', href: '/ai-consultation', icon: MessageCircle },
-    { name: 'Orders', href: '/orders', icon: ShoppingCart, auth: true },
+    { name: t('navigation.home'), href: '/', icon: Home },
+    { name: t('navigation.medicines'), href: '/medicine-search', icon: Search },
+    { name: t('navigation.consultation'), href: '/ai-consultation', icon: MessageCircle },
+    { name: t('navigation.orders'), href: '/orders', icon: ShoppingCart, auth: true },
   ];
 
   const isActive = (href: string) => {
@@ -151,7 +151,7 @@ export function Header() {
                   <Link href="/dashboard">
                     <a className="flex items-center">
                       <Home className="mr-2 h-4 w-4" />
-                      Dashboard
+                      {t('navigation.dashboard')}
                     </a>
                   </Link>
                 </DropdownMenuItem>
@@ -159,7 +159,7 @@ export function Header() {
                   <Link href="/profile">
                     <a className="flex items-center">
                       <User className="mr-2 h-4 w-4" />
-                      Profile
+                      {t('navigation.profile')}
                     </a>
                   </Link>
                 </DropdownMenuItem>
@@ -167,7 +167,7 @@ export function Header() {
                   <Link href="/settings">
                     <a className="flex items-center">
                       <Settings className="mr-2 h-4 w-4" />
-                      Settings
+                      {t('navigation.settings')}
                     </a>
                   </Link>
                 </DropdownMenuItem>
@@ -178,17 +178,17 @@ export function Header() {
                   className="text-red-600"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  {logoutMutation.isPending ? 'Signing out...' : 'Sign out'}
+                  {logoutMutation.isPending ? t('auth.signing_out') : t('header.logout')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
             <div className="flex items-center space-x-2">
               <Link href="/login">
-                <Button variant="ghost">Sign In</Button>
+                <Button variant="ghost">{t('header.login')}</Button>
               </Link>
               <Link href="/register">
-                <Button>Sign Up</Button>
+                <Button>{t('auth.register')}</Button>
               </Link>
             </div>
           )}

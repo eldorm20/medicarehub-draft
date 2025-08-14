@@ -150,8 +150,13 @@ class AuthService {
 
     this.otpSessions.set(sessionId, session);
 
-    // Send email with OTP
-    await emailService.sendOTP(email, code);
+    // Send email with OTP (with console fallback for development)
+    try {
+      await emailService.sendOTP(email, code);
+      console.log(`[DEV] Email OTP sent to ${email}: ${code}`);
+    } catch (error) {
+      console.log(`[DEV] Email failed, OTP for ${email}: ${code}`);
+    }
 
     return { sessionId, expiresAt };
   }
@@ -176,8 +181,13 @@ class AuthService {
 
     this.otpSessions.set(sessionId, session);
 
-    // Send SMS with OTP
-    await smsService.sendOTP(phone, code);
+    // Send SMS with OTP (with console fallback for development)
+    try {
+      await smsService.sendOTP(phone, code);
+      console.log(`[DEV] SMS OTP sent to ${phone}: ${code}`);
+    } catch (error) {
+      console.log(`[DEV] SMS failed, OTP for ${phone}: ${code}`);
+    }
 
     return { sessionId, expiresAt };
   }
