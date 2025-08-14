@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useRegisterStart, useOTPVerify, useRegisterComplete } from '@/hooks/useAuth';
+import { useRegister } from '@/hooks/useAuth';
 import { UserPlus, Eye, EyeOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,12 +23,7 @@ const registerSchema = z.object({
   path: ["confirmPassword"],
 });
 
-const otpVerifySchema = z.object({
-  code: z.string().length(6, 'OTP code must be 6 digits'),
-});
-
 type RegisterData = z.infer<typeof registerSchema>;
-type OTPVerifyData = z.infer<typeof otpVerifySchema>;
 
 interface RegisterFormProps {
   onSuccess?: () => void;
@@ -37,16 +32,11 @@ interface RegisterFormProps {
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [registrationStep, setRegistrationStep] = useState<'register' | 'verify'>('register');
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [registrationData, setRegistrationData] = useState<RegisterData | null>(null);
 
-  const registerStartMutation = useRegisterStart();
-  const otpVerifyMutation = useOTPVerify();
-  const registerCompleteMutation = useRegisterComplete();
+  const registerMutation = useRegister();
 
   // Registration form
-  const registerForm = useForm<RegisterData>({
+  const form = useForm<RegisterData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       firstName: '',
@@ -59,46 +49,11 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
     },
   });
 
-  // OTP verification form
-  const otpForm = useForm<OTPVerifyData>({
-    resolver: zodResolver(otpVerifySchema),
-    defaultValues: {
-      code: '',
-    },
-  });
-
-  const handleRegisterStart = async (data: RegisterData) => {
+  const handleRegister = async (data: RegisterData) => {
     try {
-      const result = await registerStartMutation.mutateAsync(data);
-      if (result.success && result.sessionId) {
-        setSessionId(result.sessionId);
-        setRegistrationData(data);
-        setRegistrationStep('verify');
-      }
-    } catch (error) {
-      // Error handled by mutation
-    }
-  };
-
-  const handleOTPVerify = async (data: OTPVerifyData) => {
-    if (!sessionId || !registrationData) return;
-
-    try {
-      const verifyResult = await otpVerifyMutation.mutateAsync({
-        sessionId,
-        code: data.code,
-      });
-      
-      if (verifyResult.success) {
-        // Complete registration
-        const completeResult = await registerCompleteMutation.mutateAsync({
-          ...registrationData,
-          sessionId,
-        });
-        
-        if (completeResult.success && onSuccess) {
-          onSuccess();
-        }
+      const result = await registerMutation.mutateAsync(data);
+      if (result.success && onSuccess) {
+        onSuccess();
       }
     } catch (error) {
       // Error handled by mutation

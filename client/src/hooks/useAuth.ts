@@ -87,41 +87,13 @@ export function useLogin() {
   });
 }
 
-export function useRegisterStart() {
-  const { toast } = useToast();
-
-  return useMutation({
-    mutationFn: async (data: RegisterData): Promise<{ success: boolean; message: string; sessionId?: string }> => {
-      return apiRequest('/api/auth/register/start', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        toast({
-          title: "OTP Sent",
-          description: data.message,
-        });
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Registration Failed",
-        description: error.message || "Failed to start registration",
-        variant: "destructive",
-      });
-    },
-  });
-}
-
-export function useRegisterComplete() {
+export function useRegister() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: RegisterData & { sessionId: string }): Promise<AuthResponse> => {
-      return apiRequest('/api/auth/register/complete', {
+    mutationFn: async (data: RegisterData): Promise<AuthResponse> => {
+      return apiRequest('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
       });
@@ -139,12 +111,14 @@ export function useRegisterComplete() {
     onError: (error: any) => {
       toast({
         title: "Registration Failed",
-        description: error.message || "Failed to complete registration",
+        description: error.message || "Failed to register",
         variant: "destructive",
       });
     },
   });
 }
+
+
 
 export function useOTPRequest() {
   const { toast } = useToast();

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { authService } from '../services/authService';
 import { storage } from '../storage';
 
 // Rate limiting store
@@ -10,36 +10,31 @@ const MAX_FAILED_ATTEMPTS = 5;
 // Blacklisted tokens (for logout)
 const blacklistedTokens = new Set<string>();
 
-interface AuthRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-    role: string;
-  };
+// Extend Express Request interface
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        userId: string;
+        email: string;
+        role: string;
+      };
+    }
+  }
 }
 
 /**
- * Extract user info from JWT token
+ * Extract user info from JWT token using authService
  */
 function extractUserFromToken(token: string): { userId: string; email: string; role: string } | null {
-  try {
-    const secret = process.env.JWT_SECRET || 'uzpharm-digital-secret-key-2024';
-    const decoded = jwt.verify(token, secret) as any;
-    
-    return {
-      userId: decoded.userId,
-      email: decoded.email,
-      role: decoded.role
-    };
-  } catch (error) {
-    return null;
-  }
+  const decoded = authService.verifyAccessToken(token);
+  return decoded ? { userId: decoded.userId, email: decoded.email, role: decoded.role } : null;
 }
 
 /**
  * Authentication middleware - requires valid JWT token
  */
-export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = req.cookies.accessToken || req.headers.authorization?.replace('Bearer ', '');
     
@@ -90,7 +85,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 /**
  * Optional authentication middleware - doesn't fail if no token
  */
-export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = req.cookies.accessToken || req.headers.authorization?.replace('Bearer ', '');
     
@@ -115,7 +110,7 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
  * Role-based authorization middleware
  */
 export const authorize = (requiredRoles: string | string[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({
         success: false,
