@@ -1,9 +1,9 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
-import { ClientDashboard } from '@/components/dashboard/client-dashboard';
-import { PharmacySellerDashboard } from '@/components/dashboard/pharmacy-seller-dashboard';
-import { PharmacyOwnerDashboard } from '@/components/dashboard/pharmacy-owner-dashboard';
+import { EnhancedClientDashboard } from '@/components/dashboard/enhanced-client-dashboard';
+import { EnhancedPharmacySellerDashboard } from '@/components/dashboard/enhanced-pharmacy-seller-dashboard';
+import { EnhancedPharmacyOwnerDashboard } from '@/components/dashboard/enhanced-pharmacy-owner-dashboard';
 import { AnalyticsDashboard } from '@/components/dashboard/analytics-dashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -100,15 +100,15 @@ export default function Dashboard() {
 
         {/* Role-based Dashboard Content */}
         {currentUser.role === 'client' && (
-          <ClientDashboard userId={currentUser.id} />
+          <EnhancedClientDashboard userId={currentUser.id} />
         )}
 
         {currentUser.role === 'pharmacy_seller' && (
-          <PharmacySellerDashboard userId={currentUser.id} />
+          <EnhancedPharmacySellerDashboard userId={currentUser.id} />
         )}
 
         {currentUser.role === 'pharmacy_owner' && (
-          <PharmacyOwnerDashboard userId={currentUser.id} />
+          <EnhancedPharmacyOwnerDashboard userId={currentUser.id} />
         )}
 
         {currentUser.role === 'super_admin' && (

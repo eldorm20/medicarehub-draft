@@ -15,7 +15,11 @@ import {
   ShoppingCart,
   Sun,
   Moon,
-  Globe
+  Globe,
+  Package,
+  Building2,
+  Store,
+  BarChart3
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -37,12 +41,43 @@ export function Header() {
     logoutMutation.mutate();
   };
 
-  const navigation = [
-    { name: t('navigation.home'), href: '/', icon: Home },
-    { name: t('navigation.medicines'), href: '/medicine-search', icon: Search },
-    { name: t('navigation.consultation'), href: '/ai-consultation', icon: MessageCircle },
-    { name: t('navigation.orders'), href: '/orders', icon: ShoppingCart, auth: true },
-  ];
+  // Role-based navigation
+  const getNavigationForRole = (role?: string) => {
+    const baseNav = [
+      { name: t('navigation.home'), href: '/', icon: Home },
+      { name: t('navigation.medicines'), href: '/medicine-search', icon: Search },
+    ];
+
+    if (!isAuthenticated) return baseNav;
+
+    switch (role) {
+      case 'client':
+        return [
+          ...baseNav,
+          { name: t('navigation.consultation'), href: '/ai-consultation', icon: MessageCircle },
+          { name: t('navigation.orders'), href: '/orders', icon: ShoppingCart },
+          { name: 'Dashboard', href: '/dashboard', icon: User }
+        ];
+      case 'pharmacy_seller':
+        return [
+          ...baseNav,
+          { name: 'Orders', href: '/orders', icon: ShoppingCart },
+          { name: 'Inventory', href: '/inventory', icon: Package },
+          { name: 'Dashboard', href: '/dashboard', icon: Store }
+        ];
+      case 'pharmacy_owner':
+        return [
+          ...baseNav,
+          { name: 'Management', href: '/pharmacy-management', icon: Building2 },
+          { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+          { name: 'Dashboard', href: '/dashboard', icon: Building2 }
+        ];
+      default:
+        return [...baseNav, { name: 'Dashboard', href: '/dashboard', icon: User }];
+    }
+  };
+
+  const navigation = getNavigationForRole(user?.role);
 
   const isActive = (href: string) => {
     if (href === '/') {
@@ -64,22 +99,18 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-6">
-          {navigation.map((item) => {
-            if (item.auth && !isAuthenticated) return null;
-            
-            return (
-              <Link key={item.href} href={item.href}
-                className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <item.icon className="w-4 h-4" />
-                <span>{item.name}</span>
-              </Link>
-            );
-          })}
+          {navigation.map((item) => (
+            <Link key={item.href} href={item.href}
+              className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive(item.href)
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <item.icon className="w-4 h-4" />
+              <span>{item.name}</span>
+            </Link>
+          ))}
         </nav>
 
         {/* Controls */}
@@ -211,7 +242,6 @@ export function Header() {
                 
                 <div className="border-t pt-4">
                   {navigation.map((item) => {
-                    if (item.auth && !isAuthenticated) return null;
                     
                     return (
                       <Link key={item.href} href={item.href}>
