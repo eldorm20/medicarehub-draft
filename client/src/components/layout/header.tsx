@@ -18,6 +18,8 @@ export function Header() {
     { name: i18n.t('navigation.consultation'), href: '/consultation' },
     { name: i18n.t('navigation.orders'), href: '/orders' },
     { name: i18n.t('navigation.dashboard'), href: '/dashboard' },
+    { name: i18n.t('navigation.pharmacy') || 'Pharmacy', href: '/pharmacy' },
+    { name: i18n.t('navigation.settings') || 'Settings', href: '/settings' },
   ];
 
   return (

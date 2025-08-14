@@ -30,6 +30,8 @@ export const translations = {
       orders: "Buyurtmalar",
       profile: "Profil",
       dashboard: "Boshqaruv paneli",
+      pharmacy: "Dorixona boshqaruvi",
+      settings: "Sozlamalar",
     },
     hero: {
       title: "Sizning AI Tibbiy",
@@ -267,6 +269,8 @@ export const translations = {
       orders: "Заказы",
       profile: "Профиль",
       dashboard: "Панель управления",
+      pharmacy: "Управление аптекой",
+      settings: "Настройки",
     },
     hero: {
       title: "Ваш ИИ Медицинский",
@@ -504,6 +508,8 @@ export const translations = {
       orders: "Orders",
       profile: "Profile",
       dashboard: "Dashboard",
+      pharmacy: "Pharmacy Management",
+      settings: "Settings",
     },
     hero: {
       title: "Your AI Medical",

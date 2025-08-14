@@ -26,6 +26,8 @@ import PrivacyPolicy from "@/pages/legal/privacy-policy";
 import MedicalDisclaimer from "@/pages/legal/medical-disclaimer";
 import { LoginPage } from "@/pages/auth/LoginPage";
 import { RegisterPage } from "@/pages/auth/RegisterPage";
+import Settings from "@/pages/settings";
+import PharmacyManagement from "@/pages/pharmacy-management";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -53,6 +55,9 @@ function Router() {
           <Route path="/legal/terms" component={TermsOfService} />
           <Route path="/legal/privacy" component={PrivacyPolicy} />
           <Route path="/legal/disclaimer" component={MedicalDisclaimer} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/pharmacy-management" component={PharmacyManagement} />
+          <Route path="/pharmacy" component={PharmacyManagement} />
           <Route component={NotFound} />
         </Switch>
       </main>
