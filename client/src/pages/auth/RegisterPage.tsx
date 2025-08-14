@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation, Link } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
-import { RegisterForm } from '@/components/auth/RegisterForm';
+import { SimpleRegisterForm } from '@/components/auth/SimpleRegisterForm';
 import { Loader2 } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -25,7 +25,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 px-4 py-8">
       <div className="w-full max-w-lg space-y-6">
-        <RegisterForm 
+        <SimpleRegisterForm 
           onSuccess={() => setLocation('/dashboard')} 
         />
         

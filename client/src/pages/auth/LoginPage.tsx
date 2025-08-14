@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation, Link } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
-import { LoginForm } from '@/components/auth/LoginForm';
+import { SimpleLoginForm } from '@/components/auth/SimpleLoginForm';
 import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -25,7 +25,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
       <div className="w-full max-w-md space-y-6">
-        <LoginForm 
+        <SimpleLoginForm 
           onSuccess={() => setLocation('/dashboard')} 
         />
         
