@@ -146,6 +146,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint to import medicine data without authentication
+  app.post('/api/test-import-medicines', async (req, res) => {
+    try {
+      console.log('Starting test medicine import...');
+      
+      // Import the test medicine data directly
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      const testDataPath = path.join(process.cwd(), 'server', 'test_medicines.json');
+      
+      if (!fs.existsSync(testDataPath)) {
+        return res.status(404).json({ error: 'Test medicine data not found' });
+      }
+
+      const medicines = JSON.parse(fs.readFileSync(testDataPath, 'utf8'));
+      console.log(`Importing ${medicines.length} test medicines...`);
+
+      // Clear and import medicines directly into storage
+      await storage.insertMedicines(medicines);
+      
+      console.log(`Successfully imported ${medicines.length} medicines!`);
+      res.json({ 
+        success: true, 
+        message: `Imported ${medicines.length} medicines`,
+        sample: medicines[0]?.title || 'No medicines found'
+      });
+    } catch (error) {
+      console.error('Test import error:', error);
+      res.status(500).json({ error: 'Failed to import test medicines: ' + error.message });
+    }
+  });
+
   // AI consultation routes
   app.post('/api/ai/consult', async (req, res) => {
     try {

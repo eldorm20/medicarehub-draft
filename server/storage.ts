@@ -146,10 +146,21 @@ export class MemStorage implements IStorage {
 
   // Medicine operations (existing)
   async searchMedicines(query: string, filters: any = {}): Promise<Medicine[]> {
-    return this.medicines.filter(med => 
+    console.log(`Searching medicines: query="${query}", medicines count=${this.medicines.length}`);
+    
+    if (!query || query.trim() === '') {
+      // Return first 50 medicines if no query
+      return this.medicines.slice(0, filters.limit || 50);
+    }
+    
+    const results = this.medicines.filter(med => 
       med.title?.toLowerCase().includes(query.toLowerCase()) ||
-      med.manufacturer?.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 50);
+      med.manufacturer?.toLowerCase().includes(query.toLowerCase()) ||
+      med.activeIngredient?.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, filters.limit || 50);
+    
+    console.log(`Found ${results.length} matching medicines`);
+    return results;
   }
 
   async getMedicine(id: string): Promise<Medicine | undefined> {
