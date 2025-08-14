@@ -33,6 +33,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { InventoryManager } from '@/components/inventory/inventory-manager';
 import * as XLSX from 'xlsx';
 
 interface Medicine {

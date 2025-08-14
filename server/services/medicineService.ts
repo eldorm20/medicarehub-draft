@@ -14,7 +14,7 @@ export class MedicineService {
 
   async importUzPharmData(): Promise<void> {
     try {
-      const dataPath = path.join(process.cwd(), 'attached_assets', 'uzpharm_all_medicines_1754894688748.json');
+      const dataPath = path.join(process.cwd(), '..', 'attached_assets', 'uzpharm_all_medicines_1754894688748.json');
       
       if (!fs.existsSync(dataPath)) {
         console.error('UzPharm data file not found at:', dataPath);
@@ -115,6 +115,77 @@ export class MedicineService {
       isAvailable: medicine.isAvailable,
       // Add pharmacy availability check here
     }));
+  }
+
+  async getAllMedicines(filters: any = {}): Promise<Medicine[]> {
+    return await storage.getAllMedicines(filters);
+  }
+
+  async updateMedicineStock(medicineId: string, quantity: number, price?: number): Promise<Medicine | null> {
+    return await storage.updateMedicineStock(medicineId, quantity, price);
+  }
+
+  async getMedicinesByCategory(category: string): Promise<Medicine[]> {
+    return await storage.getMedicinesByCategory(category);
+  }
+
+  async exportMedicinesToCSV(): Promise<string> {
+    const medicines = await storage.getAllMedicines();
+    const csvHeader = 'ID,Title,Manufacturer,Country,Active Ingredient,Dosage,Form,Price,Stock,Available\n';
+    const csvRows = medicines.map((med: any) => 
+      `"${med.id}","${med.title}","${med.manufacturer}","${med.country}","${med.activeIngredient || ''}","${med.dosage || ''}","${med.form || ''}","${med.price || ''}","${med.stock || 0}","${med.isAvailable}"`
+    ).join('\n');
+    
+    return csvHeader + csvRows;
+  }
+
+  async importMedicinesFromCSV(csvData: string): Promise<{ imported: number; errors: string[] }> {
+    const lines = csvData.split('\n');
+    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+    const errors: string[] = [];
+    let imported = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      
+      try {
+        const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+        const medicine: Partial<InsertMedicine> = {};
+        
+        headers.forEach((header, index) => {
+          const value = values[index];
+          switch (header.toLowerCase()) {
+            case 'title':
+              medicine.title = value;
+              break;
+            case 'manufacturer':
+              medicine.manufacturer = value;
+              break;
+            case 'country':
+              medicine.country = value;
+              break;
+            case 'price':
+              medicine.price = value ? parseFloat(value) : null;
+              break;
+            case 'stock':
+              medicine.stock = value ? parseInt(value) : 0;
+              break;
+            case 'available':
+              medicine.isAvailable = value.toLowerCase() === 'true';
+              break;
+          }
+        });
+
+        if (medicine.title) {
+          await storage.createMedicine(medicine as InsertMedicine);
+          imported++;
+        }
+      } catch (error) {
+        errors.push(`Line ${i + 1}: ${error}`);
+      }
+    }
+
+    return { imported, errors };
   }
 }
 

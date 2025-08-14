@@ -17,6 +17,7 @@ export interface Medicine {
   form?: string;
   packaging?: string;
   price?: number;
+  stock?: number;
   isAvailable: boolean;
   createdAt?: string;
   updatedAt?: string;

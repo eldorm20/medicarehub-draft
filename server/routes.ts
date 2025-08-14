@@ -11,6 +11,7 @@ import { authenticate, authorize, optionalAuth } from "./middleware/auth";
 import authRoutes from "./routes/auth";
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 
 // File upload configuration
 const upload = multer({
@@ -68,6 +69,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get popular medicines error:', error);
       res.status(500).json({ error: 'Failed to get popular medicines' });
+    }
+  });
+
+  // Inventory management routes
+  app.get('/api/inventory', authenticate, authorize(['pharmacy_owner', 'pharmacy_seller', 'super_admin']), async (req, res) => {
+    try {
+      const { category, limit = 100, offset = 0 } = req.query;
+      const filters = { 
+        category: category as string, 
+        limit: parseInt(limit as string), 
+        offset: parseInt(offset as string) 
+      };
+      const medicines = await medicineService.getAllMedicines(filters);
+      res.json(medicines);
+    } catch (error) {
+      console.error('Get inventory error:', error);
+      res.status(500).json({ error: 'Failed to get inventory' });
+    }
+  });
+
+  app.put('/api/inventory/:medicineId/stock', authenticate, authorize(['pharmacy_owner', 'pharmacy_seller']), async (req, res) => {
+    try {
+      const { medicineId } = req.params;
+      const { quantity, price } = req.body;
+      
+      const updated = await medicineService.updateMedicineStock(medicineId, quantity, price);
+      if (!updated) {
+        return res.status(404).json({ error: 'Medicine not found' });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error('Update stock error:', error);
+      res.status(500).json({ error: 'Failed to update stock' });
+    }
+  });
+
+  app.get('/api/inventory/export', authenticate, authorize(['pharmacy_owner', 'super_admin']), async (req, res) => {
+    try {
+      const csvData = await medicineService.exportMedicinesToCSV();
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="inventory.csv"');
+      res.send(csvData);
+    } catch (error) {
+      console.error('Export inventory error:', error);
+      res.status(500).json({ error: 'Failed to export inventory' });
+    }
+  });
+
+  app.post('/api/inventory/import', authenticate, authorize(['pharmacy_owner', 'super_admin']), upload.single('csvFile'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'CSV file is required' });
+      }
+      
+      const csvData = fs.readFileSync(req.file.path, 'utf8');
+      const result = await medicineService.importMedicinesFromCSV(csvData);
+      
+      // Clean up uploaded file
+      fs.unlinkSync(req.file.path);
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Import inventory error:', error);
+      res.status(500).json({ error: 'Failed to import inventory' });
+    }
+  });
+
+  app.post('/api/medicines/import-uzpharm', authenticate, authorize(['super_admin']), async (req, res) => {
+    try {
+      await medicineService.importUzPharmData();
+      res.json({ success: true, message: 'UzPharm data imported successfully' });
+    } catch (error) {
+      console.error('UzPharm import error:', error);
+      res.status(500).json({ error: 'Failed to import UzPharm data' });
     }
   });
 
