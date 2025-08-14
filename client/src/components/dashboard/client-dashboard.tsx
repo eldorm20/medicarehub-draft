@@ -30,7 +30,8 @@ export function ClientDashboard({ userId }: ClientDashboardProps) {
   const { data: orders = [] } = useQuery({
     queryKey: ['/api/orders', userId],
     queryFn: async () => {
-      const response = await apiRequest('GET', `/api/orders/${userId}`);
+      const response = await fetch(`/api/orders/${userId}`);
+      if (!response.ok) throw new Error('Failed to fetch orders');
       return response.json() as Promise<Order[]>;
     },
   });
@@ -38,7 +39,8 @@ export function ClientDashboard({ userId }: ClientDashboardProps) {
   const { data: prescriptions = [] } = useQuery({
     queryKey: ['/api/prescriptions', userId],
     queryFn: async () => {
-      const response = await apiRequest('GET', `/api/prescriptions/${userId}`);
+      const response = await fetch(`/api/prescriptions/${userId}`);
+      if (!response.ok) throw new Error('Failed to fetch prescriptions');
       return response.json() as Promise<Prescription[]>;
     },
   });

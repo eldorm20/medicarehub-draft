@@ -32,7 +32,8 @@ export function AnalyticsDashboard() {
   const { data: analytics, isLoading } = useQuery({
     queryKey: ['/api/analytics'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/analytics');
+      const response = await fetch('/api/analytics');
+      if (!response.ok) throw new Error('Failed to fetch analytics');
       return response.json() as Promise<AnalyticsData>;
     },
   });

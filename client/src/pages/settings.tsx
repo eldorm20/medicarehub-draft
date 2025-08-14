@@ -35,7 +35,7 @@ import {
 import { motion } from 'framer-motion';
 
 export default function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { language, changeLanguage, availableLanguages, t } = useLanguage();
   const { toast } = useToast();

@@ -1,6 +1,8 @@
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { useAuth, useLogout } from '@/hooks/useAuth';
+import { useTheme } from '@/components/ui/theme-provider';
+import { useLanguage } from '@/hooks/useLanguage';
 import { 
   User, 
   LogOut, 
@@ -10,7 +12,10 @@ import {
   Home,
   Search,
   MessageCircle,
-  ShoppingCart
+  ShoppingCart,
+  Sun,
+  Moon,
+  Globe
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -25,6 +30,8 @@ export function Header() {
   const [location] = useLocation();
   const { user, isAuthenticated, isLoading } = useAuth();
   const logoutMutation = useLogout();
+  const { theme, toggleTheme } = useTheme();
+  const { language, changeLanguage, availableLanguages, t } = useLanguage();
 
   const handleLogout = () => {
     logoutMutation.mutate();
@@ -75,8 +82,45 @@ export function Header() {
           })}
         </nav>
 
-        {/* User Actions */}
-        <div className="flex items-center space-x-4">
+        {/* Controls */}
+        <div className="flex items-center space-x-2">
+          {/* Theme Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="h-9 w-9"
+            data-testid="theme-toggle"
+          >
+            {theme === 'dark' ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </Button>
+
+          {/* Language Selector */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9" data-testid="language-selector">
+                <Globe className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {availableLanguages.map((lang) => (
+                <DropdownMenuItem
+                  key={lang.code}
+                  onClick={() => changeLanguage(lang.code)}
+                  className={language === lang.code ? 'bg-accent' : ''}
+                >
+                  <span className="mr-2">{lang.flag}</span>
+                  {lang.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* User Actions */}
           {isLoading ? (
             <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
           ) : isAuthenticated && user ? (
