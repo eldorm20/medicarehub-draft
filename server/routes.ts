@@ -7,6 +7,8 @@ import { medicineService } from "./services/medicineService";
 import { paymentService } from "./services/paymentService";
 import { deliveryService } from "./services/deliveryService";
 import { insertOrderSchema, insertPrescriptionSchema, insertAIConsultationSchema } from "@shared/schema";
+import { authenticate, authorize, optionalAuth } from "./middleware/auth";
+import authRoutes from "./routes/auth";
 import multer from 'multer';
 import path from 'path';
 
@@ -24,8 +26,11 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
-  // Medicine routes
-  app.get('/api/medicines/search', async (req, res) => {
+  // Auth routes
+  app.use('/api/auth', authRoutes);
+  
+  // Medicine routes (public access)
+  app.get('/api/medicines/search', optionalAuth, async (req, res) => {
     try {
       const { q: query, country, year, manufacturer, limit = 50 } = req.query;
       const filters = { 
@@ -187,8 +192,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Order routes
-  app.post('/api/orders', async (req, res) => {
+  // Order routes (require authentication)
+  app.post('/api/orders', authenticate, async (req, res) => {
     try {
       const orderData = insertOrderSchema.parse(req.body);
       const { items } = req.body;
@@ -209,7 +214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/orders/:userId', async (req, res) => {
+  app.get('/api/orders/:userId', authenticate, async (req, res) => {
     try {
       const orders = await storage.getUserOrders(req.params.userId);
       res.json(orders);
@@ -303,8 +308,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Analytics routes
-  app.get('/api/analytics', async (req, res) => {
+  // Analytics routes (require admin access)
+  app.get('/api/analytics', authenticate, authorize('pharmacy_owner', 'super_admin'), async (req, res) => {
     try {
       const analytics = await storage.getAnalytics();
       res.json(analytics);
@@ -314,8 +319,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Data import route (for development)
-  app.post('/api/admin/import-medicines', async (req, res) => {
+  // Data import route (admin only)
+  app.post('/api/admin/import-medicines', authenticate, authorize('super_admin'), async (req, res) => {
     try {
       await medicineService.importUzPharmData();
       res.json({ message: 'Medicines imported successfully' });

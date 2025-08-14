@@ -26,7 +26,7 @@ class EmailService {
   constructor() {
     // Use free email service - Gmail SMTP (free up to 100 emails/day per account)
     // In production, you can create multiple Gmail accounts or use other free services
-    this.transporter = nodemailer.createTransporter({
+    this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER || 'uzpharm.notifications@gmail.com',
@@ -55,6 +55,40 @@ class EmailService {
       console.error('Failed to send email:', error);
       return false;
     }
+  }
+
+  async sendOTPEmail(email: string, code: string): Promise<void> {
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8fafc; padding: 20px;">
+        <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1e40af; margin: 0; font-size: 24px;">🏥 UzPharm Digital</h1>
+            <p style="color: #64748b; margin: 5px 0 0 0;">Verification Code</p>
+          </div>
+          
+          <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; border-radius: 8px; text-align: center; margin: 20px 0;">
+            <h2 style="color: white; margin: 0; font-size: 36px; letter-spacing: 2px;">${code}</h2>
+            <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 14px;">This code expires in 5 minutes</p>
+          </div>
+          
+          <div style="text-align: center; color: #64748b; font-size: 14px;">
+            <p>Enter this code to verify your account</p>
+            <p>If you didn't request this code, please ignore this email</p>
+          </div>
+          
+          <div style="border-top: 1px solid #e2e8f0; margin-top: 30px; padding-top: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+            <p>UzPharm Digital - AI-Powered Healthcare Platform</p>
+            <p>🌐 www.uzpharm.digital | 📱 +998 71 123-45-67</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    await this.sendEmail({
+      to: email,
+      subject: 'UzPharm - Your Verification Code',
+      html: html
+    });
   }
 
   async sendOrderConfirmation(order: OrderNotification, language: string = 'en'): Promise<boolean> {

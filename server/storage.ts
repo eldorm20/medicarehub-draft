@@ -30,7 +30,10 @@ import { eq, and, like, desc, sql, ilike } from "drizzle-orm";
 export interface IStorage {
   // User operations (required for auth)
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByEmailOrPhone(emailOrPhone: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUserPassword(userId: string, passwordHash: string): Promise<void>;
 
   // Medicine operations
   searchMedicines(query: string, filters?: any): Promise<Medicine[]>;
@@ -60,10 +63,230 @@ export interface IStorage {
   getAnalytics(): Promise<any>;
 }
 
+// In-memory storage implementation for testing without database
+export class MemStorage implements IStorage {
+  private users: Map<string, User> = new Map();
+  private usersByEmail: Map<string, User> = new Map();
+  private usersByPhone: Map<string, User> = new Map();
+  private medicines: Medicine[] = [];
+  private orders: Order[] = [];
+  private prescriptions: Prescription[] = [];
+  private consultations: AIConsultation[] = [];
+  private messages: ChatMessage[] = [];
+
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return this.usersByEmail.get(email);
+  }
+
+  async getUserByEmailOrPhone(emailOrPhone: string): Promise<User | undefined> {
+    const isEmail = emailOrPhone.includes('@');
+    if (isEmail) {
+      return this.usersByEmail.get(emailOrPhone);
+    } else {
+      return this.usersByPhone.get(emailOrPhone);
+    }
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const id = userData.id || `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const user: User = {
+      id,
+      email: userData.email || null,
+      firstName: userData.firstName || null,
+      lastName: userData.lastName || null,
+      profileImageUrl: userData.profileImageUrl || null,
+      role: userData.role || 'client',
+      phone: userData.phone || null,
+      passwordHash: userData.passwordHash || null,
+      dateOfBirth: userData.dateOfBirth || null,
+      loyaltyPoints: userData.loyaltyPoints || 0,
+      loyaltyTier: userData.loyaltyTier || 'bronze',
+      isActive: userData.isActive !== undefined ? userData.isActive : true,
+      emailVerified: userData.emailVerified || false,
+      phoneVerified: userData.phoneVerified || false,
+      lastLoginAt: userData.lastLoginAt || null,
+      createdAt: userData.createdAt || new Date(),
+      updatedAt: new Date(),
+    };
+
+    this.users.set(id, user);
+    if (user.email) this.usersByEmail.set(user.email, user);
+    if (user.phone) this.usersByPhone.set(user.phone, user);
+    
+    return user;
+  }
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) {
+      user.passwordHash = passwordHash;
+      user.updatedAt = new Date();
+      this.users.set(userId, user);
+    }
+  }
+
+  // Medicine operations (existing)
+  async searchMedicines(query: string, filters: any = {}): Promise<Medicine[]> {
+    return this.medicines.filter(med => 
+      med.title?.toLowerCase().includes(query.toLowerCase()) ||
+      med.manufacturer?.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 50);
+  }
+
+  async getMedicine(id: string): Promise<Medicine | undefined> {
+    return this.medicines.find(med => med.id === id);
+  }
+
+  async getMedicinesByIds(ids: string[]): Promise<Medicine[]> {
+    return this.medicines.filter(med => ids.includes(med.id));
+  }
+
+  async insertMedicines(medicineData: InsertMedicine[]): Promise<void> {
+    medicineData.forEach(data => {
+      const medicine: Medicine = {
+        id: data.id || `med_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        title: data.title || '',
+        manufacturer: data.manufacturer || '',
+        country: data.country || '',
+        year: data.year || new Date().getFullYear(),
+        activeIngredient: data.activeIngredient || '',
+        form: data.form || '',
+        packaging: data.packaging || '',
+        prescriptionRequired: data.prescriptionRequired || false,
+        price: data.price || 0,
+        description: data.description || '',
+        sideEffects: data.sideEffects || '',
+        contraindications: data.contraindications || '',
+        dosage: data.dosage || '',
+        category: data.category || '',
+        imageUrl: data.imageUrl || '',
+        inStock: data.inStock !== undefined ? data.inStock : true,
+        createdAt: data.createdAt || new Date(),
+        updatedAt: data.updatedAt || new Date(),
+      };
+      this.medicines.push(medicine);
+    });
+  }
+
+  // Other operations (simplified for testing)
+  async getPharmacies(): Promise<Pharmacy[]> {
+    return [];
+  }
+
+  async getPharmacyInventory(pharmacyId: string): Promise<PharmacyInventory[]> {
+    return [];
+  }
+
+  async createOrder(orderData: InsertOrder, items: any[]): Promise<Order> {
+    const order: Order = {
+      id: `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId: orderData.userId || '',
+      pharmacyId: orderData.pharmacyId || '',
+      status: orderData.status || 'pending',
+      totalAmount: orderData.totalAmount || 0,
+      deliveryAddress: orderData.deliveryAddress || '',
+      deliveryMethod: orderData.deliveryMethod || 'delivery',
+      notes: orderData.notes || '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.orders.push(order);
+    return order;
+  }
+
+  async getUserOrders(userId: string): Promise<Order[]> {
+    return this.orders.filter(order => order.userId === userId);
+  }
+
+  async getOrder(id: string): Promise<Order | undefined> {
+    return this.orders.find(order => order.id === id);
+  }
+
+  async createPrescription(prescriptionData: InsertPrescription): Promise<Prescription> {
+    const prescription: Prescription = {
+      id: `presc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId: prescriptionData.userId || '',
+      doctorName: prescriptionData.doctorName || '',
+      medications: prescriptionData.medications || [],
+      diagnosis: prescriptionData.diagnosis || '',
+      imageUrl: prescriptionData.imageUrl || '',
+      verified: prescriptionData.verified || false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.prescriptions.push(prescription);
+    return prescription;
+  }
+
+  async getUserPrescriptions(userId: string): Promise<Prescription[]> {
+    return this.prescriptions.filter(presc => presc.userId === userId);
+  }
+
+  async createAIConsultation(consultationData: InsertAIConsultation): Promise<AIConsultation> {
+    const consultation: AIConsultation = {
+      id: `consult_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId: consultationData.userId || '',
+      sessionId: consultationData.sessionId || '',
+      symptoms: consultationData.symptoms || '',
+      aiResponse: consultationData.aiResponse || {},
+      recommendations: consultationData.recommendations || {},
+      severity: consultationData.severity || '',
+      followUpRequired: consultationData.followUpRequired || false,
+      createdAt: new Date(),
+    };
+    this.consultations.push(consultation);
+    return consultation;
+  }
+
+  async addChatMessage(messageData: InsertChatMessage): Promise<ChatMessage> {
+    const message: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      consultationId: messageData.consultationId || '',
+      isAi: messageData.isAi || false,
+      message: messageData.message || '',
+      metadata: messageData.metadata || {},
+      createdAt: new Date(),
+    };
+    this.messages.push(message);
+    return message;
+  }
+
+  async getConsultationMessages(consultationId: string): Promise<ChatMessage[]> {
+    return this.messages.filter(msg => msg.consultationId === consultationId);
+  }
+
+  async getAnalytics(): Promise<any> {
+    return {
+      revenue: this.orders.reduce((sum, order) => sum + order.totalAmount, 0),
+      orders: this.orders.length,
+      pharmacies: 0,
+      consultations: this.consultations.length,
+    };
+  }
+}
+
 export class DatabaseStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserByEmailOrPhone(emailOrPhone: string): Promise<User | undefined> {
+    const isEmail = emailOrPhone.includes('@');
+    const [user] = await db.select().from(users).where(
+      isEmail ? eq(users.email, emailOrPhone) : eq(users.phone, emailOrPhone)
+    );
     return user;
   }
 
@@ -82,29 +305,39 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    await db.update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
   // Medicine operations
   async searchMedicines(query: string, filters: any = {}): Promise<Medicine[]> {
-    let queryBuilder = db.select().from(medicines);
+    const conditions = [];
 
     if (query) {
-      queryBuilder = queryBuilder.where(
+      conditions.push(
         sql`${medicines.title} ILIKE ${`%${query}%`} OR ${medicines.manufacturer} ILIKE ${`%${query}%`} OR ${medicines.activeIngredient} ILIKE ${`%${query}%`}`
       );
     }
 
     if (filters.country) {
-      queryBuilder = queryBuilder.where(eq(medicines.country, filters.country));
+      conditions.push(eq(medicines.country, filters.country));
     }
 
     if (filters.year) {
-      queryBuilder = queryBuilder.where(eq(medicines.year, filters.year));
+      conditions.push(eq(medicines.year, filters.year));
     }
 
     if (filters.manufacturer) {
-      queryBuilder = queryBuilder.where(ilike(medicines.manufacturer, `%${filters.manufacturer}%`));
+      conditions.push(ilike(medicines.manufacturer, `%${filters.manufacturer}%`));
     }
 
-    return await queryBuilder.limit(50).execute();
+    if (conditions.length === 0) {
+      return await db.select().from(medicines).limit(50);
+    }
+
+    return await db.select().from(medicines).where(and(...conditions)).limit(50);
   }
 
   async getMedicine(id: string): Promise<Medicine | undefined> {
@@ -213,4 +446,5 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+// Use in-memory storage for now until database is set up
+export const storage = new MemStorage();

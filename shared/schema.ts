@@ -42,10 +42,14 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: userRoleEnum("role").default("client").notNull(),
   phone: varchar("phone"),
+  passwordHash: varchar("password_hash"),
   dateOfBirth: timestamp("date_of_birth"),
   loyaltyPoints: integer("loyalty_points").default(0),
   loyaltyTier: varchar("loyalty_tier").default("bronze"),
   isActive: boolean("is_active").default(true),
+  emailVerified: boolean("email_verified").default(false),
+  phoneVerified: boolean("phone_verified").default(false),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -208,6 +212,13 @@ export const loyaltyTransactions = pgTable("loyalty_transactions", {
 // Export types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+
+// Insert schemas for validation
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export type Medicine = typeof medicines.$inferSelect;
 export type InsertMedicine = typeof medicines.$inferInsert;
 export type Pharmacy = typeof pharmacies.$inferSelect;
@@ -225,15 +236,7 @@ export type InsertChatMessage = typeof chatMessages.$inferInsert;
 export type PharmacyInventory = typeof pharmacyInventory.$inferSelect;
 export type InsertPharmacyInventory = typeof pharmacyInventory.$inferInsert;
 
-// Zod schemas
-export const insertUserSchema = createInsertSchema(users).pick({
-  email: true,
-  firstName: true,
-  lastName: true,
-  role: true,
-  phone: true,
-  dateOfBirth: true,
-});
+// Additional Zod schemas
 
 export const insertMedicineSchema = createInsertSchema(medicines);
 export const insertOrderSchema = createInsertSchema(orders);

@@ -24,17 +24,19 @@ import SymptomChecker from "@/pages/symptom-checker";
 import TermsOfService from "@/pages/legal/terms-of-service";
 import PrivacyPolicy from "@/pages/legal/privacy-policy";
 import MedicalDisclaimer from "@/pages/legal/medical-disclaimer";
+import { LoginPage } from "@/pages/auth/LoginPage";
+import { RegisterPage } from "@/pages/auth/RegisterPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
-
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
         <Switch>
           <Route path="/" component={Home} />
+          <Route path="/auth/login" component={LoginPage} />
+          <Route path="/auth/register" component={RegisterPage} />
           <Route path="/medicine-search" component={MedicineSearch} />
           <Route path="/medicines" component={MedicineSearch} />
           <Route path="/ai-consultation" component={AIConsultation} />
