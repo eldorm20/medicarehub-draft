@@ -1,16 +1,16 @@
 import { useEffect } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, Link } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { Loader2 } from 'lucide-react';
 
-export function LoginPage() {
+export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated) {
-      setLocation('/');
+      setLocation('/dashboard');
     }
   }, [isAuthenticated, setLocation]);
 
@@ -24,10 +24,21 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md space-y-6">
         <LoginForm 
-          onSuccess={() => setLocation('/')} 
+          onSuccess={() => setLocation('/dashboard')} 
         />
+        
+        <div className="text-center">
+          <p className="text-sm text-gray-600">
+            Don't have an account?{' '}
+            <Link href="/register">
+              <a className="font-medium text-blue-600 hover:text-blue-500">
+                Create one here
+              </a>
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

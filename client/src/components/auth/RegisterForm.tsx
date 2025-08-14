@@ -1,41 +1,34 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useRegisterStart, useOTPVerify, useRegisterComplete } from '@/hooks/useAuth';
+import { UserPlus, Eye, EyeOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link } from 'wouter';
-import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, EyeOff, Mail, Phone, CheckCircle } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 const registerSchema = z.object({
-  contactType: z.enum(['email', 'phone']),
-  email: z.string().email('Invalid email address').optional(),
-  phone: z.string().regex(/^\+998\d{9}$/, 'Invalid Uzbekistan phone number (+998XXXXXXXXX)').optional(),
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
+  email: z.string().email('Please enter a valid email address'),
+  phone: z.string().optional(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
-  role: z.enum(['client', 'pharmacy_seller', 'pharmacy_owner']).default('client'),
-  otpCode: z.string().length(6, 'OTP must be 6 digits'),
+  role: z.enum(['client', 'pharmacy_seller', 'pharmacy_owner']).optional(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ["confirmPassword"]
-}).refine(data => {
-  if (data.contactType === 'email') return !!data.email;
-  return !!data.phone;
-}, {
-  message: "Contact information is required",
-  path: ["email"]
+  path: ["confirmPassword"],
 });
 
-type RegisterFormData = z.infer<typeof registerSchema>;
+const otpVerifySchema = z.object({
+  code: z.string().length(6, 'OTP code must be 6 digits'),
+});
+
+type RegisterData = z.infer<typeof registerSchema>;
+type OTPVerifyData = z.infer<typeof otpVerifySchema>;
 
 interface RegisterFormProps {
   onSuccess?: () => void;
@@ -44,407 +37,299 @@ interface RegisterFormProps {
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCountdown, setOtpCountdown] = useState(0);
-  
-  const { 
-    register, 
-    requestOTP,
-    isRegistering, 
-    isRequestingOTP,
-    registerResult, 
-    requestOTPResult,
-    registerError,
-    requestOTPError
-  } = useAuth();
-  
-  const { toast } = useToast();
+  const [registrationStep, setRegistrationStep] = useState<'register' | 'verify'>('register');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [registrationData, setRegistrationData] = useState<RegisterData | null>(null);
 
-  const form = useForm<RegisterFormData>({
+  const registerStartMutation = useRegisterStart();
+  const otpVerifyMutation = useOTPVerify();
+  const registerCompleteMutation = useRegisterComplete();
+
+  // Registration form
+  const registerForm = useForm<RegisterData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      contactType: 'email',
-      email: '',
-      phone: '',
       firstName: '',
       lastName: '',
+      email: '',
+      phone: '',
       password: '',
       confirmPassword: '',
       role: 'client',
-      otpCode: '',
     },
   });
 
-  const contactType = form.watch('contactType');
+  // OTP verification form
+  const otpForm = useForm<OTPVerifyData>({
+    resolver: zodResolver(otpVerifySchema),
+    defaultValues: {
+      code: '',
+    },
+  });
 
-  const handleRequestOTP = async () => {
-    const values = form.getValues();
-    const contactInfo = contactType === 'email' ? values.email : values.phone;
-
-    if (!contactInfo) {
-      toast({
-        title: 'Error',
-        description: `Please enter your ${contactType}`,
-        variant: 'destructive',
-      });
-      return;
+  const handleRegisterStart = async (data: RegisterData) => {
+    try {
+      const result = await registerStartMutation.mutateAsync(data);
+      if (result.success && result.sessionId) {
+        setSessionId(result.sessionId);
+        setRegistrationData(data);
+        setRegistrationStep('verify');
+      }
+    } catch (error) {
+      // Error handled by mutation
     }
-
-    const otpData = contactType === 'email' 
-      ? { email: contactInfo, type: 'email' as const }
-      : { phone: contactInfo, type: 'sms' as const };
-
-    requestOTP(otpData, {
-      onSuccess: (result) => {
-        if (result.success) {
-          setOtpSent(true);
-          setOtpCountdown(60);
-          toast({
-            title: 'OTP sent',
-            description: result.message,
-          });
-          
-          // Start countdown
-          const interval = setInterval(() => {
-            setOtpCountdown(prev => {
-              if (prev <= 1) {
-                clearInterval(interval);
-                return 0;
-              }
-              return prev - 1;
-            });
-          }, 1000);
-        } else {
-          toast({
-            title: 'Failed to send OTP',
-            description: result.message,
-            variant: 'destructive',
-          });
-        }
-      },
-      onError: () => {
-        toast({
-          title: 'Error',
-          description: 'Failed to send OTP',
-          variant: 'destructive',
-        });
-      },
-    });
   };
 
-  const handleSubmit = (data: RegisterFormData) => {
-    register(data, {
-      onSuccess: (result) => {
-        if (result.success) {
-          toast({
-            title: 'Registration successful',
-            description: 'Welcome to UzPharm!',
-          });
-          onSuccess?.();
-        } else {
-          toast({
-            title: 'Registration failed',
-            description: result.message,
-            variant: 'destructive',
-          });
-        }
-      },
-      onError: () => {
-        toast({
-          title: 'Registration failed',
-          description: 'An error occurred during registration',
-          variant: 'destructive',
+  const handleOTPVerify = async (data: OTPVerifyData) => {
+    if (!sessionId || !registrationData) return;
+
+    try {
+      const verifyResult = await otpVerifyMutation.mutateAsync({
+        sessionId,
+        code: data.code,
+      });
+      
+      if (verifyResult.success) {
+        // Complete registration
+        const completeResult = await registerCompleteMutation.mutateAsync({
+          ...registrationData,
+          sessionId,
         });
-      },
-    });
+        
+        if (completeResult.success && onSuccess) {
+          onSuccess();
+        }
+      }
+    } catch (error) {
+      // Error handled by mutation
+    }
+  };
+
+  const goBackToRegister = () => {
+    setRegistrationStep('register');
+    setSessionId(null);
+    setRegistrationData(null);
+    otpForm.reset();
   };
 
   return (
-    <Card className="w-full max-w-lg mx-auto" data-testid="card-register">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center" data-testid="text-register-title">
-          Create Account
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="text-center">
+        <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+          <UserPlus className="w-8 h-8 text-green-600" />
+        </div>
+        <CardTitle className="text-2xl font-bold">
+          {registrationStep === 'register' ? 'Create Account' : 'Verify Email'}
         </CardTitle>
-        <CardDescription className="text-center" data-testid="text-register-description">
-          Join UzPharm Digital healthcare platform
+        <CardDescription>
+          {registrationStep === 'register' 
+            ? 'Join UzPharm Digital platform'
+            : 'Enter the verification code sent to your email'
+          }
         </CardDescription>
       </CardHeader>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(handleSubmit)}>
-          <CardContent className="space-y-4">
-            {registerResult && !registerResult.success && (
-              <Alert variant="destructive" data-testid="alert-register-error">
-                <AlertDescription>{registerResult.message}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Contact Type Selection */}
-            <FormField
-              control={form.control}
-              name="contactType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel data-testid="label-contact-type">Contact Method</FormLabel>
-                  <Tabs value={field.value} onValueChange={field.onChange} data-testid="tabs-contact-type">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="email" data-testid="tab-email">Email</TabsTrigger>
-                      <TabsTrigger value="phone" data-testid="tab-phone">Phone</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </FormItem>
-              )}
-            />
-
-            {/* Contact Information */}
-            {contactType === 'email' ? (
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel data-testid="label-email">Email Address</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          {...field}
-                          type="email"
-                          placeholder="your.email@example.com"
-                          className="pl-10"
-                          data-testid="input-email"
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage data-testid="error-email" />
-                  </FormItem>
-                )}
-              />
-            ) : (
-              <FormField
-                control={form.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel data-testid="label-phone">Phone Number</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          {...field}
-                          type="tel"
-                          placeholder="+998901234567"
-                          className="pl-10"
-                          data-testid="input-phone"
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage data-testid="error-phone" />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Names */}
+      <CardContent>
+        {registrationStep === 'register' ? (
+          <form onSubmit={registerForm.handleSubmit(handleRegisterStart)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="firstName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel data-testid="label-first-name">First Name</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="John" data-testid="input-first-name" />
-                    </FormControl>
-                    <FormMessage data-testid="error-first-name" />
-                  </FormItem>
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  placeholder="John"
+                  {...registerForm.register('firstName')}
+                />
+                {registerForm.formState.errors.firstName && (
+                  <p className="text-sm text-red-600">
+                    {registerForm.formState.errors.firstName.message}
+                  </p>
                 )}
-              />
+              </div>
 
-              <FormField
-                control={form.control}
-                name="lastName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel data-testid="label-last-name">Last Name</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Doe" data-testid="input-last-name" />
-                    </FormControl>
-                    <FormMessage data-testid="error-last-name" />
-                  </FormItem>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  placeholder="Doe"
+                  {...registerForm.register('lastName')}
+                />
+                {registerForm.formState.errors.lastName && (
+                  <p className="text-sm text-red-600">
+                    {registerForm.formState.errors.lastName.message}
+                  </p>
                 )}
-              />
+              </div>
             </div>
 
-            {/* Role Selection */}
-            <FormField
-              control={form.control}
-              name="role"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel data-testid="label-role">Account Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value} data-testid="select-role">
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select account type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="client" data-testid="option-client">Customer</SelectItem>
-                      <SelectItem value="pharmacy_seller" data-testid="option-seller">Pharmacy Staff</SelectItem>
-                      <SelectItem value="pharmacy_owner" data-testid="option-owner">Pharmacy Owner</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage data-testid="error-role" />
-                </FormItem>
-              )}
-            />
-
-            {/* Password Fields */}
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel data-testid="label-password">Password</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input
-                        {...field}
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="Create a strong password"
-                        className="pr-10"
-                        data-testid="input-password"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                        data-testid="button-toggle-password"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </FormControl>
-                  <FormMessage data-testid="error-password" />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel data-testid="label-confirm-password">Confirm Password</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input
-                        {...field}
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        placeholder="Confirm your password"
-                        className="pr-10"
-                        data-testid="input-confirm-password"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        data-testid="button-toggle-confirm-password"
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </FormControl>
-                  <FormMessage data-testid="error-confirm-password" />
-                </FormItem>
-              )}
-            />
-
-            {/* OTP Section */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <FormLabel data-testid="label-otp">Verification Code</FormLabel>
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="john@example.com"
+                {...registerForm.register('email')}
+              />
+              {registerForm.formState.errors.email && (
+                <p className="text-sm text-red-600">
+                  {registerForm.formState.errors.email.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number (Optional)</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+998 XX XXX XX XX"
+                {...registerForm.register('phone')}
+              />
+              {registerForm.formState.errors.phone && (
+                <p className="text-sm text-red-600">
+                  {registerForm.formState.errors.phone.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role">Account Type</Label>
+              <Select onValueChange={(value) => registerForm.setValue('role', value as any)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select account type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client - Regular user</SelectItem>
+                  <SelectItem value="pharmacy_seller">Pharmacy Seller - Staff member</SelectItem>
+                  <SelectItem value="pharmacy_owner">Pharmacy Owner - Business owner</SelectItem>
+                </SelectContent>
+              </Select>
+              {registerForm.formState.errors.role && (
+                <p className="text-sm text-red-600">
+                  {registerForm.formState.errors.role.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Create a strong password"
+                  {...registerForm.register('password')}
+                />
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  disabled={isRequestingOTP || otpCountdown > 0}
-                  onClick={handleRequestOTP}
-                  data-testid="button-request-otp"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
                 >
-                  {isRequestingOTP ? (
-                    <>
-                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                      Sending...
-                    </>
-                  ) : otpSent && otpCountdown > 0 ? (
-                    `Resend in ${otpCountdown}s`
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
                   ) : (
-                    'Send OTP'
+                    <Eye className="h-4 w-4" />
                   )}
                 </Button>
               </div>
-
-              <FormField
-                control={form.control}
-                name="otpCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <div className="relative">
-                        <Input
-                          {...field}
-                          type="text"
-                          placeholder="Enter 6-digit code"
-                          maxLength={6}
-                          className={otpSent ? 'pr-10' : ''}
-                          data-testid="input-otp"
-                        />
-                        {otpSent && (
-                          <CheckCircle className="absolute right-3 top-3 h-4 w-4 text-green-500" />
-                        )}
-                      </div>
-                    </FormControl>
-                    <FormMessage data-testid="error-otp" />
-                  </FormItem>
-                )}
-              />
+              {registerForm.formState.errors.password && (
+                <p className="text-sm text-red-600">
+                  {registerForm.formState.errors.password.message}
+                </p>
+              )}
             </div>
-          </CardContent>
 
-          <CardFooter className="flex flex-col space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm your password"
+                  {...registerForm.register('confirmPassword')}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {registerForm.formState.errors.confirmPassword && (
+                <p className="text-sm text-red-600">
+                  {registerForm.formState.errors.confirmPassword.message}
+                </p>
+              )}
+            </div>
+
             <Button
               type="submit"
               className="w-full"
-              disabled={isRegistering || !otpSent}
-              data-testid="button-register"
+              disabled={registerStartMutation.isPending}
             >
-              {isRegistering ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                'Create Account'
-              )}
+              {registerStartMutation.isPending ? 'Creating Account...' : 'Create Account'}
             </Button>
-
-            <div className="text-center text-sm">
-              <span className="text-muted-foreground">Already have an account? </span>
-              <Link href="/auth/login">
-                <a className="text-primary hover:underline" data-testid="link-login">
-                  Sign in
-                </a>
-              </Link>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            <div className="text-center">
+              <p className="text-sm text-gray-600 mb-4">
+                We've sent a 6-digit verification code to <strong>{registrationData?.email}</strong>
+              </p>
             </div>
-          </CardFooter>
-        </form>
-      </Form>
+
+            <form onSubmit={otpForm.handleSubmit(handleOTPVerify)} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="verification-code">Verification Code</Label>
+                <Input
+                  id="verification-code"
+                  type="text"
+                  placeholder="000000"
+                  maxLength={6}
+                  className="text-center text-2xl font-mono tracking-widest"
+                  {...otpForm.register('code')}
+                />
+                {otpForm.formState.errors.code && (
+                  <p className="text-sm text-red-600">
+                    {otpForm.formState.errors.code.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={otpVerifyMutation.isPending || registerCompleteMutation.isPending}
+                >
+                  {otpVerifyMutation.isPending || registerCompleteMutation.isPending 
+                    ? 'Verifying...' 
+                    : 'Verify & Complete Registration'
+                  }
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={goBackToRegister}
+                >
+                  Change Email Address
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }

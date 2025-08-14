@@ -1,113 +1,83 @@
-import { Router } from 'express';
+import express from 'express';
 import { authService } from '../services/authService';
 import { authenticate, authRateLimit, trackAuthFailure, clearAuthFailures } from '../middleware/auth';
-import { insertUserSchema } from '@shared/schema';
 import { z } from 'zod';
 
-const router = Router();
+const router = express.Router();
 
-// Request OTP for registration/login
-router.post('/request-otp', authRateLimit, async (req, res) => {
-  try {
-    const { email, phone, type } = req.body;
+// Apply rate limiting to all auth endpoints
+router.use(authRateLimit);
 
-    if (!email && !phone) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email or phone number is required'
-      });
-    }
-
-    if (type === 'email' && email) {
-      const result = await authService.sendEmailOTP(email);
-      res.json(result);
-    } else if (type === 'sms' && phone) {
-      const result = await authService.sendSMSOTP(phone);
-      res.json(result);
-    } else {
-      res.status(400).json({
-        success: false,
-        message: 'Invalid OTP type or missing contact info'
-      });
-    }
-  } catch (error) {
-    console.error('Request OTP error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to send OTP'
-    });
-  }
+// Validation schemas
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  phone: z.string().optional(),
+  role: z.enum(['client', 'pharmacy_seller', 'pharmacy_owner', 'super_admin']).optional()
 });
 
-// Register new user
-router.post('/register', authRateLimit, async (req, res) => {
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1)
+});
+
+const otpRequestSchema = z.object({
+  email: z.string().email().optional(),
+  phone: z.string().optional()
+}).refine(data => data.email || data.phone, {
+  message: "Either email or phone must be provided"
+});
+
+const otpVerifySchema = z.object({
+  sessionId: z.string(),
+  code: z.string().length(6)
+});
+
+const completeRegistrationSchema = z.object({
+  sessionId: z.string(),
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  phone: z.string().optional(),
+  role: z.enum(['client', 'pharmacy_seller', 'pharmacy_owner', 'super_admin']).optional()
+});
+
+const passwordResetSchema = z.object({
+  sessionId: z.string(),
+  email: z.string().email(),
+  newPassword: z.string().min(8)
+});
+
+const refreshTokenSchema = z.object({
+  refreshToken: z.string()
+});
+
+/**
+ * Start registration process with email OTP
+ */
+router.post('/register/start', async (req, res) => {
   try {
-    const registrationSchema = insertUserSchema.extend({
-      password: z.string().min(8, 'Password must be at least 8 characters'),
-      confirmPassword: z.string(),
-      otpCode: z.string().length(6, 'OTP must be 6 digits')
-    }).refine(data => data.password === data.confirmPassword, {
-      message: "Passwords don't match",
-      path: ["confirmPassword"]
-    });
-
-    const validatedData = registrationSchema.parse(req.body);
-
-    const result = await authService.register({
-      email: validatedData.email || undefined,
-      phone: validatedData.phone || undefined,
-      firstName: validatedData.firstName || '',
-      lastName: validatedData.lastName || '',
-      password: validatedData.password,
-      role: validatedData.role,
-      otpCode: validatedData.otpCode
-    });
-
-    if (result.success && result.tokens) {
-      // Set httpOnly cookies for tokens
-      const isProduction = process.env.NODE_ENV === 'production';
-      
-      res.cookie('accessToken', result.tokens.accessToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'strict',
-        maxAge: 15 * 60 * 1000 // 15 minutes
+    const validation = registerSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input data',
+        errors: validation.error.errors
       });
-
-      res.cookie('refreshToken', result.tokens.refreshToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-      });
-
-      clearAuthFailures(req);
-    } else {
-      trackAuthFailure(req);
     }
 
+    const result = await authService.registerWithEmail(validation.data);
+    
     res.json({
       success: result.success,
       message: result.message,
-      user: result.user ? {
-        id: result.user.id,
-        email: result.user.email,
-        firstName: result.user.firstName,
-        lastName: result.user.lastName,
-        role: result.user.role
-      } : undefined
+      sessionId: result.sessionId
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors
-      });
-    }
-
-    console.error('Registration error:', error);
-    trackAuthFailure(req);
+    console.error('Registration start error:', error);
     res.status(500).json({
       success: false,
       message: 'Registration failed'
@@ -115,60 +85,129 @@ router.post('/register', authRateLimit, async (req, res) => {
   }
 });
 
-// Login user
-router.post('/login', authRateLimit, async (req, res) => {
+/**
+ * Complete registration after OTP verification
+ */
+router.post('/register/complete', async (req, res) => {
   try {
-    const loginSchema = z.object({
-      emailOrPhone: z.string().min(1, 'Email or phone is required'),
-      password: z.string().min(1, 'Password is required')
-    });
-
-    const { emailOrPhone, password } = loginSchema.parse(req.body);
-
-    const result = await authService.login(emailOrPhone, password);
-
-    if (result.success && result.tokens) {
-      const isProduction = process.env.NODE_ENV === 'production';
-      
-      res.cookie('accessToken', result.tokens.accessToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'strict',
-        maxAge: 15 * 60 * 1000
-      });
-
-      res.cookie('refreshToken', result.tokens.refreshToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
-
-      clearAuthFailures(req);
-    } else {
-      trackAuthFailure(req);
-    }
-
-    res.json({
-      success: result.success,
-      message: result.message,
-      user: result.user ? {
-        id: result.user.id,
-        email: result.user.email,
-        firstName: result.user.firstName,
-        lastName: result.user.lastName,
-        role: result.user.role
-      } : undefined
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+    const validation = completeRegistrationSchema.safeParse(req.body);
+    if (!validation.success) {
       return res.status(400).json({
         success: false,
-        message: 'Validation error',
-        errors: error.errors
+        message: 'Invalid input data',
+        errors: validation.error.errors
       });
     }
 
+    const result = await authService.completeRegistration(
+      validation.data.sessionId,
+      validation.data
+    );
+
+    if (result.success && result.user) {
+      const accessToken = authService.generateAccessToken(result.user);
+      const refreshToken = authService.generateRefreshToken(result.user);
+
+      // Set httpOnly cookies
+      res.cookie('accessToken', accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 15 * 60 * 1000 // 15 minutes
+      });
+
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      res.json({
+        success: true,
+        message: result.message,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          role: result.user.role,
+          isActive: result.user.isActive
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message
+      });
+    }
+  } catch (error) {
+    console.error('Registration complete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Registration completion failed'
+    });
+  }
+});
+
+/**
+ * Login with email and password
+ */
+router.post('/login', async (req, res) => {
+  try {
+    const validation = loginSchema.safeParse(req.body);
+    if (!validation.success) {
+      trackAuthFailure(req);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input data',
+        errors: validation.error.errors
+      });
+    }
+
+    const result = await authService.loginWithPassword(
+      validation.data.email,
+      validation.data.password
+    );
+
+    if (result.success && result.user && result.accessToken && result.refreshToken) {
+      clearAuthFailures(req);
+
+      // Set httpOnly cookies
+      res.cookie('accessToken', result.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 15 * 60 * 1000 // 15 minutes
+      });
+
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      res.json({
+        success: true,
+        message: result.message,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          role: result.user.role,
+          isActive: result.user.isActive
+        }
+      });
+    } else {
+      trackAuthFailure(req);
+      res.status(401).json({
+        success: false,
+        message: result.message
+      });
+    }
+  } catch (error) {
     console.error('Login error:', error);
     trackAuthFailure(req);
     res.status(500).json({
@@ -178,11 +217,150 @@ router.post('/login', authRateLimit, async (req, res) => {
   }
 });
 
-// Refresh tokens
+/**
+ * Request OTP for passwordless login
+ */
+router.post('/login/otp/request', async (req, res) => {
+  try {
+    const validation = otpRequestSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input data',
+        errors: validation.error.errors
+      });
+    }
+
+    let result;
+    if (validation.data.email) {
+      result = await authService.sendEmailOTP(validation.data.email);
+    } else if (validation.data.phone) {
+      result = await authService.sendSMSOTP(validation.data.phone);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Either email or phone must be provided'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'OTP sent successfully',
+      sessionId: result.sessionId,
+      expiresAt: result.expiresAt
+    });
+  } catch (error) {
+    console.error('OTP request error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP'
+    });
+  }
+});
+
+/**
+ * Verify OTP and get user info (used for both login and registration)
+ */
+router.post('/otp/verify', async (req, res) => {
+  try {
+    const validation = otpVerifySchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input data',
+        errors: validation.error.errors
+      });
+    }
+
+    const result = await authService.verifyOTP(
+      validation.data.sessionId,
+      validation.data.code
+    );
+
+    res.json({
+      success: result.success,
+      message: result.message,
+      email: result.email,
+      phone: result.phone
+    });
+  } catch (error) {
+    console.error('OTP verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'OTP verification failed'
+    });
+  }
+});
+
+/**
+ * Complete OTP login after verification
+ */
+router.post('/login/otp/complete', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID is required'
+      });
+    }
+
+    const result = await authService.loginWithOTP(sessionId);
+
+    if (result.success && result.user && result.accessToken && result.refreshToken) {
+      clearAuthFailures(req);
+
+      // Set httpOnly cookies
+      res.cookie('accessToken', result.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 15 * 60 * 1000 // 15 minutes
+      });
+
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      res.json({
+        success: true,
+        message: result.message,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          role: result.user.role,
+          isActive: result.user.isActive
+        }
+      });
+    } else {
+      trackAuthFailure(req);
+      res.status(401).json({
+        success: false,
+        message: result.message
+      });
+    }
+  } catch (error) {
+    console.error('OTP login complete error:', error);
+    trackAuthFailure(req);
+    res.status(500).json({
+      success: false,
+      message: 'OTP login failed'
+    });
+  }
+});
+
+/**
+ * Refresh access token
+ */
 router.post('/refresh', async (req, res) => {
   try {
-    const refreshToken = req.cookies?.refreshToken;
-
+    let refreshToken = req.body.refreshToken || req.cookies.refreshToken;
+    
     if (!refreshToken) {
       return res.status(401).json({
         success: false,
@@ -190,27 +368,27 @@ router.post('/refresh', async (req, res) => {
       });
     }
 
-    const result = await authService.refreshTokens(refreshToken);
+    const result = await authService.refreshAccessToken(refreshToken);
 
-    if (result.success && result.tokens) {
-      const isProduction = process.env.NODE_ENV === 'production';
-      
-      res.cookie('accessToken', result.tokens.accessToken, {
+    if (result.success && result.accessToken) {
+      // Set new access token cookie
+      res.cookie('accessToken', result.accessToken, {
         httpOnly: true,
-        secure: isProduction,
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 15 * 60 * 1000
+        maxAge: 15 * 60 * 1000 // 15 minutes
       });
 
-      res.cookie('refreshToken', result.tokens.refreshToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000
+      res.json({
+        success: true,
+        message: result.message
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        message: result.message
       });
     }
-
-    res.json(result);
   } catch (error) {
     console.error('Token refresh error:', error);
     res.status(500).json({
@@ -220,20 +398,51 @@ router.post('/refresh', async (req, res) => {
   }
 });
 
-// Get current user
-router.get('/me', authenticate, async (req, res) => {
+/**
+ * Logout
+ */
+router.post('/logout', authenticate, (req, res) => {
+  try {
+    const accessToken = req.cookies.accessToken;
+    const refreshToken = req.cookies.refreshToken;
+
+    if (accessToken && refreshToken) {
+      authService.logout(accessToken, refreshToken);
+    }
+
+    // Clear cookies
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+
+    res.json({
+      success: true,
+      message: 'Logout successful'
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Logout failed'
+    });
+  }
+});
+
+/**
+ * Get current user info
+ */
+router.get('/me', authenticate, (req, res) => {
   try {
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: 'User not authenticated'
+        message: 'Not authenticated'
       });
     }
 
     res.json({
       success: true,
       user: {
-        id: req.user.userId,
+        userId: req.user.userId,
         email: req.user.email,
         role: req.user.role
       }
@@ -247,75 +456,61 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
-// Logout
-router.post('/logout', (req, res) => {
+/**
+ * Password reset request
+ */
+router.post('/password/reset/request', async (req, res) => {
   try {
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    const result = await authService.sendPasswordResetOTP(email);
     
     res.json({
-      success: true,
-      message: 'Logged out successfully'
+      success: result.success,
+      message: result.message,
+      sessionId: result.sessionId
     });
   } catch (error) {
-    console.error('Logout error:', error);
+    console.error('Password reset request error:', error);
     res.status(500).json({
       success: false,
-      message: 'Logout failed'
+      message: 'Password reset request failed'
     });
   }
 });
 
-// Forgot password
-router.post('/forgot-password', authRateLimit, async (req, res) => {
+/**
+ * Complete password reset
+ */
+router.post('/password/reset/complete', async (req, res) => {
   try {
-    const { emailOrPhone } = req.body;
-
-    if (!emailOrPhone) {
+    const validation = passwordResetSchema.safeParse(req.body);
+    if (!validation.success) {
       return res.status(400).json({
         success: false,
-        message: 'Email or phone number is required'
+        message: 'Invalid input data',
+        errors: validation.error.errors
       });
     }
 
-    const result = await authService.forgotPassword(emailOrPhone);
-    res.json(result);
-  } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process password reset request'
+    const result = await authService.resetPassword(
+      validation.data.sessionId,
+      validation.data.email,
+      validation.data.newPassword
+    );
+
+    res.json({
+      success: result.success,
+      message: result.message
     });
-  }
-});
-
-// Reset password
-router.post('/reset-password', authRateLimit, async (req, res) => {
-  try {
-    const resetSchema = z.object({
-      emailOrPhone: z.string().min(1, 'Email or phone is required'),
-      otpCode: z.string().length(6, 'OTP must be 6 digits'),
-      newPassword: z.string().min(8, 'Password must be at least 8 characters'),
-      confirmPassword: z.string()
-    }).refine(data => data.newPassword === data.confirmPassword, {
-      message: "Passwords don't match",
-      path: ["confirmPassword"]
-    });
-
-    const { emailOrPhone, otpCode, newPassword } = resetSchema.parse(req.body);
-
-    const result = await authService.resetPassword(emailOrPhone, otpCode, newPassword);
-    res.json(result);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors
-      });
-    }
-
-    console.error('Reset password error:', error);
+    console.error('Password reset complete error:', error);
     res.status(500).json({
       success: false,
       message: 'Password reset failed'

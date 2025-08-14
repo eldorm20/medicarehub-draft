@@ -34,6 +34,7 @@ export interface IStorage {
   getUserByEmailOrPhone(emailOrPhone: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserPassword(userId: string, passwordHash: string): Promise<void>;
+  updateUserLastLogin(userId: string): Promise<void>;
 
   // Medicine operations
   searchMedicines(query: string, filters?: any): Promise<Medicine[]>;
@@ -127,6 +128,19 @@ export class MemStorage implements IStorage {
       user.passwordHash = passwordHash;
       user.updatedAt = new Date();
       this.users.set(userId, user);
+      if (user.email) this.usersByEmail.set(user.email, user);
+      if (user.phone) this.usersByPhone.set(user.phone, user);
+    }
+  }
+
+  async updateUserLastLogin(userId: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) {
+      user.lastLoginAt = new Date();
+      user.updatedAt = new Date();
+      this.users.set(userId, user);
+      if (user.email) this.usersByEmail.set(user.email, user);
+      if (user.phone) this.usersByPhone.set(user.phone, user);
     }
   }
 
@@ -150,22 +164,24 @@ export class MemStorage implements IStorage {
     medicineData.forEach(data => {
       const medicine: Medicine = {
         id: data.id || `med_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        title: data.title || '',
-        manufacturer: data.manufacturer || '',
-        country: data.country || '',
-        year: data.year || new Date().getFullYear(),
-        activeIngredient: data.activeIngredient || '',
-        form: data.form || '',
-        packaging: data.packaging || '',
-        prescriptionRequired: data.prescriptionRequired || false,
-        price: data.price || 0,
-        description: data.description || '',
-        sideEffects: data.sideEffects || '',
-        contraindications: data.contraindications || '',
-        dosage: data.dosage || '',
-        category: data.category || '',
-        imageUrl: data.imageUrl || '',
-        inStock: data.inStock !== undefined ? data.inStock : true,
+        dtRowId: data.dtRowId || null,
+        blankNum: data.blankNum || null,
+        country: data.country || null,
+        customer: data.customer || null,
+        manufacturer: data.manufacturer || null,
+        regNum: data.regNum || null,
+        series: data.series || null,
+        certDate: data.certDate || null,
+        certOrg: data.certOrg || null,
+        title: data.title,
+        title2: data.title2 || null,
+        year: data.year || null,
+        activeIngredient: data.activeIngredient || null,
+        dosage: data.dosage || null,
+        form: data.form || null,
+        packaging: data.packaging || null,
+        price: data.price || null,
+        isAvailable: data.isAvailable !== undefined ? data.isAvailable : true,
         createdAt: data.createdAt || new Date(),
         updatedAt: data.updatedAt || new Date(),
       };
@@ -185,15 +201,20 @@ export class MemStorage implements IStorage {
   async createOrder(orderData: InsertOrder, items: any[]): Promise<Order> {
     const order: Order = {
       id: `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      userId: orderData.userId || '',
-      pharmacyId: orderData.pharmacyId || '',
+      userId: orderData.userId,
+      pharmacyId: orderData.pharmacyId,
+      orderNumber: orderData.orderNumber,
       status: orderData.status || 'pending',
-      totalAmount: orderData.totalAmount || 0,
-      deliveryAddress: orderData.deliveryAddress || '',
-      deliveryMethod: orderData.deliveryMethod || 'delivery',
-      notes: orderData.notes || '',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      deliveryMethod: orderData.deliveryMethod,
+      paymentMethod: orderData.paymentMethod,
+      totalAmount: orderData.totalAmount,
+      deliveryAddress: orderData.deliveryAddress || null,
+      deliveryFee: orderData.deliveryFee || null,
+      loyaltyPointsUsed: orderData.loyaltyPointsUsed || 0,
+      loyaltyPointsEarned: orderData.loyaltyPointsEarned || 0,
+      notes: orderData.notes || null,
+      createdAt: orderData.createdAt || new Date(),
+      updatedAt: orderData.updatedAt || new Date(),
     };
     this.orders.push(order);
     return order;
@@ -210,14 +231,16 @@ export class MemStorage implements IStorage {
   async createPrescription(prescriptionData: InsertPrescription): Promise<Prescription> {
     const prescription: Prescription = {
       id: `presc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      userId: prescriptionData.userId || '',
-      doctorName: prescriptionData.doctorName || '',
-      medications: prescriptionData.medications || [],
-      diagnosis: prescriptionData.diagnosis || '',
-      imageUrl: prescriptionData.imageUrl || '',
-      verified: prescriptionData.verified || false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      userId: prescriptionData.userId,
+      doctorName: prescriptionData.doctorName || null,
+      imageUrl: prescriptionData.imageUrl || null,
+      analysisResult: prescriptionData.analysisResult || null,
+      isVerified: prescriptionData.isVerified || false,
+      verifiedBy: prescriptionData.verifiedBy || null,
+      verifiedAt: prescriptionData.verifiedAt || null,
+      expiryDate: prescriptionData.expiryDate || null,
+      createdAt: prescriptionData.createdAt || new Date(),
+      updatedAt: prescriptionData.updatedAt || new Date(),
     };
     this.prescriptions.push(prescription);
     return prescription;

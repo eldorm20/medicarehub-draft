@@ -24,8 +24,8 @@ import SymptomChecker from "@/pages/symptom-checker";
 import TermsOfService from "@/pages/legal/terms-of-service";
 import PrivacyPolicy from "@/pages/legal/privacy-policy";
 import MedicalDisclaimer from "@/pages/legal/medical-disclaimer";
-import { LoginPage } from "@/pages/auth/LoginPage";
-import { RegisterPage } from "@/pages/auth/RegisterPage";
+import LoginPage from "@/pages/auth/LoginPage";
+import RegisterPage from "@/pages/auth/RegisterPage";
 import Settings from "@/pages/settings";
 import PharmacyManagement from "@/pages/pharmacy-management";
 import NotFound from "@/pages/not-found";
@@ -37,8 +37,8 @@ function Router() {
       <main className="flex-1">
         <Switch>
           <Route path="/" component={Home} />
-          <Route path="/auth/login" component={LoginPage} />
-          <Route path="/auth/register" component={RegisterPage} />
+          <Route path="/login" component={LoginPage} />
+          <Route path="/register" component={RegisterPage} />
           <Route path="/medicine-search" component={MedicineSearch} />
           <Route path="/medicines" component={MedicineSearch} />
           <Route path="/ai-consultation" component={AIConsultation} />

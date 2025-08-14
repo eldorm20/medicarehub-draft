@@ -57,7 +57,7 @@ class EmailService {
     }
   }
 
-  async sendOTPEmail(email: string, code: string): Promise<void> {
+  async sendOTP(email: string, code: string): Promise<void> {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8fafc; padding: 20px;">
         <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">

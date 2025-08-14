@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 
 interface User {
   id: string;
   email: string;
-  firstName?: string;
-  lastName?: string;
+  firstName: string;
+  lastName: string;
   role: string;
+  isActive: boolean;
 }
 
 interface AuthResponse {
@@ -16,178 +18,340 @@ interface AuthResponse {
 }
 
 interface LoginData {
-  emailOrPhone: string;
+  email: string;
   password: string;
 }
 
 interface RegisterData {
-  email?: string;
-  phone?: string;
+  email: string;
+  password: string;
   firstName: string;
   lastName: string;
-  password: string;
-  confirmPassword: string;
-  otpCode: string;
+  phone?: string;
   role?: string;
 }
 
-interface OTPRequest {
+interface OTPRequestData {
   email?: string;
   phone?: string;
-  type: 'email' | 'sms';
 }
 
-interface ForgotPasswordData {
-  emailOrPhone: string;
-}
-
-interface ResetPasswordData {
-  emailOrPhone: string;
-  otpCode: string;
-  newPassword: string;
-  confirmPassword: string;
+interface OTPVerifyData {
+  sessionId: string;
+  code: string;
 }
 
 export function useAuth() {
-  const queryClient = useQueryClient();
-
-  // Get current user
   const { data: user, isLoading, error } = useQuery({
     queryKey: ['/api/auth/me'],
     retry: false,
-    select: (data: AuthResponse) => data.user,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
-
-  // Request OTP mutation
-  const requestOTPMutation = useMutation({
-    mutationFn: async (data: OTPRequest) => {
-      const response = await fetch('/api/auth/request-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      return response.json();
-    },
-  });
-
-  // Register mutation
-  const registerMutation = useMutation({
-    mutationFn: async (data: RegisterData) => {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-      }
-    },
-  });
-
-  // Login mutation
-  const loginMutation = useMutation({
-    mutationFn: async (data: LoginData) => {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-      }
-    },
-  });
-
-  // Logout mutation
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.clear();
-      window.location.href = '/';
-    },
-  });
-
-  // Forgot password mutation
-  const forgotPasswordMutation = useMutation({
-    mutationFn: async (data: ForgotPasswordData) => {
-      const response = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      return response.json();
-    },
-  });
-
-  // Reset password mutation
-  const resetPasswordMutation = useMutation({
-    mutationFn: async (data: ResetPasswordData) => {
-      const response = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      return response.json();
-    },
-  });
-
-  // Refresh tokens (automatic)
-  const refreshTokens = async () => {
-    try {
-      await fetch('/api/auth/refresh', { method: 'POST' });
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-    }
-  };
 
   return {
-    // State
-    user,
+    user: user?.user,
     isLoading,
-    isAuthenticated: !!user,
-    error,
+    isAuthenticated: !!user?.user,
+    error
+  };
+}
 
-    // Actions
-    requestOTP: requestOTPMutation.mutate,
-    register: registerMutation.mutate,
-    login: loginMutation.mutate,
-    logout: logoutMutation.mutate,
-    forgotPassword: forgotPasswordMutation.mutate,
-    resetPassword: resetPasswordMutation.mutate,
-    refreshTokens,
+export function useLogin() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-    // Mutation states
-    isRequestingOTP: requestOTPMutation.isPending,
-    isRegistering: registerMutation.isPending,
-    isLoggingIn: loginMutation.isPending,
-    isLoggingOut: logoutMutation.isPending,
-    isForgettingPassword: forgotPasswordMutation.isPending,
-    isResettingPassword: resetPasswordMutation.isPending,
+  return useMutation({
+    mutationFn: async (data: LoginData): Promise<AuthResponse> => {
+      return apiRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        // Invalidate auth query to refetch user data
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+        toast({
+          title: "Login Successful",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Login Failed",
+        description: error.message || "Failed to login",
+        variant: "destructive",
+      });
+    },
+  });
+}
 
-    // Mutation results
-    requestOTPResult: requestOTPMutation.data,
-    registerResult: registerMutation.data,
-    loginResult: loginMutation.data,
-    forgotPasswordResult: forgotPasswordMutation.data,
-    resetPasswordResult: resetPasswordMutation.data,
+export function useRegisterStart() {
+  const { toast } = useToast();
 
-    // Errors
-    requestOTPError: requestOTPMutation.error,
-    registerError: registerMutation.error,
-    loginError: loginMutation.error,
-    forgotPasswordError: forgotPasswordMutation.error,
-    resetPasswordError: resetPasswordMutation.error,
+  return useMutation({
+    mutationFn: async (data: RegisterData): Promise<{ success: boolean; message: string; sessionId?: string }> => {
+      return apiRequest('/api/auth/register/start', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "OTP Sent",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Registration Failed",
+        description: error.message || "Failed to start registration",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useRegisterComplete() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: RegisterData & { sessionId: string }): Promise<AuthResponse> => {
+      return apiRequest('/api/auth/register/complete', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        // Invalidate auth query to refetch user data
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+        toast({
+          title: "Registration Successful",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Registration Failed",
+        description: error.message || "Failed to complete registration",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useOTPRequest() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: OTPRequestData): Promise<{ success: boolean; message: string; sessionId?: string; expiresAt?: Date }> => {
+      return apiRequest('/api/auth/login/otp/request', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "OTP Sent",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "OTP Request Failed",
+        description: error.message || "Failed to send OTP",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useOTPVerify() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: OTPVerifyData): Promise<{ success: boolean; message: string; email?: string; phone?: string }> => {
+      return apiRequest('/api/auth/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "OTP Verified",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "OTP Verification Failed",
+        description: error.message || "Failed to verify OTP",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useOTPLogin() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (sessionId: string): Promise<AuthResponse> => {
+      return apiRequest('/api/auth/login/otp/complete', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId }),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        // Invalidate auth query to refetch user data
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+        toast({
+          title: "Login Successful",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "OTP Login Failed",
+        description: error.message || "Failed to login with OTP",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (): Promise<{ success: boolean; message: string }> => {
+      return apiRequest('/api/auth/logout', {
+        method: 'POST',
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        // Clear all cached data
+        queryClient.clear();
+        toast({
+          title: "Logout Successful",
+          description: data.message,
+        });
+        // Optionally redirect to login page
+        window.location.href = '/';
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Logout Failed",
+        description: error.message || "Failed to logout",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function usePasswordReset() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (email: string): Promise<{ success: boolean; message: string; sessionId?: string }> => {
+      return apiRequest('/api/auth/password/reset/request', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "Password Reset",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Password Reset Failed",
+        description: error.message || "Failed to initiate password reset",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function usePasswordResetComplete() {
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: { sessionId: string; email: string; newPassword: string }): Promise<{ success: boolean; message: string }> => {
+      return apiRequest('/api/auth/password/reset/complete', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "Password Reset Successful",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Password Reset Failed",
+        description: error.message || "Failed to reset password",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+// Role-based access control helper
+export function useRoleCheck() {
+  const { user } = useAuth();
+
+  const hasRole = (requiredRole: string): boolean => {
+    if (!user) return false;
+    
+    const roleHierarchy = {
+      'super_admin': 4,
+      'pharmacy_owner': 3,
+      'pharmacy_seller': 2,
+      'client': 1
+    };
+
+    const userLevel = roleHierarchy[user.role as keyof typeof roleHierarchy] || 0;
+    const requiredLevel = roleHierarchy[requiredRole as keyof typeof roleHierarchy] || 0;
+
+    return userLevel >= requiredLevel;
+  };
+
+  const isClient = (): boolean => hasRole('client');
+  const isSeller = (): boolean => hasRole('pharmacy_seller');
+  const isOwner = (): boolean => hasRole('pharmacy_owner');
+  const isAdmin = (): boolean => hasRole('super_admin');
+
+  return {
+    hasRole,
+    isClient,
+    isSeller,
+    isOwner,
+    isAdmin,
+    userRole: user?.role
   };
 }
