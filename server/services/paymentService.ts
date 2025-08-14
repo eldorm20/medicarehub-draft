@@ -325,6 +325,63 @@ export class PaymentService {
     }
   }
 
+  // General payment processing method (wrapper for different payment systems)
+  async processPayment(paymentData: { amount: number; orderId: string; userId?: string; method: string }): Promise<any> {
+    const { amount, orderId, method } = paymentData;
+    
+    if (!this.validatePaymentAmount(amount)) {
+      throw new Error('Invalid payment amount');
+    }
+    
+    switch (method) {
+      case 'click':
+        // Simulate Click payment processing
+        return {
+          success: true,
+          transactionId: this.generateTransactionId(),
+          paymentUrl: `https://my.click.uz/services/pay?service_id=${this.clickServiceId}&merchant_trans_id=${orderId}&amount=${amount}`,
+          status: 'pending'
+        };
+      case 'payme':
+        // Simulate Payme payment processing
+        return {
+          success: true,
+          transactionId: this.generateTransactionId(),
+          paymentUrl: `https://checkout.paycom.uz/${btoa(JSON.stringify({ m: this.paymeMerchantId, ac: { order_id: orderId }, a: amount }))}`,
+          status: 'pending'
+        };
+      case 'cash':
+        return {
+          success: true,
+          transactionId: this.generateTransactionId(),
+          status: 'cash_on_delivery'
+        };
+      default:
+        throw new Error(`Unsupported payment method: ${method}`);
+    }
+  }
+
+  async verifyPayment(transactionId: string, method: string): Promise<boolean> {
+    // Simulate payment verification
+    // In production, this would call the actual payment provider APIs
+    try {
+      switch (method) {
+        case 'click':
+        case 'payme':
+          // Simulate API call to verify transaction
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return Math.random() > 0.1; // 90% success rate for simulation
+        case 'cash':
+          return true; // Cash payments are always verified on delivery
+        default:
+          return false;
+      }
+    } catch (error) {
+      console.error('Payment verification error:', error);
+      return false;
+    }
+  }
+
   // General payment utilities
   generateTransactionId(): string {
     return crypto.randomUUID();
